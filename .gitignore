@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Trained models
+models/*.pth
+models/*.pt
+models/*.bin
+models/*.safetensors
+
+# Large datasets
+data/text/*
+data/images/*
+data/multimodal/*
+
+# Uploaded files
+uploads/
+
+# Flask
+instance/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
