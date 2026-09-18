@@ -5,24 +5,30 @@ from transformers import RobertaTokenizer
 from text_model import TextAIDetector
 
 
-MODEL_PATH = "../models/text_detector.pth"
+# --------------------------------------------------
+# SETTINGS
+
+MODEL_PATH = "models/text_detector.pth"
 
 
-# Device
+# --------------------------------------------------
+# DEVICE
 
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
 
-# Tokenizer
+# --------------------------------------------------
+# TOKENIZER
 
 tokenizer = RobertaTokenizer.from_pretrained(
     "roberta-base"
 )
 
 
-# Load model
+# --------------------------------------------------
+# LOAD MODEL
 
 model = TextAIDetector()
 
@@ -38,7 +44,8 @@ model = model.to(device)
 model.eval()
 
 
-# Prediction function
+# --------------------------------------------------
+# PREDICTION FUNCTION
 
 def predict_text(text):
 
@@ -78,16 +85,26 @@ def predict_text(text):
         probabilities[0][1].item()
     )
 
+    ai_percentage = (
+        ai_probability * 100
+    )
+
     return {
         "human_probability": human_probability,
         "ai_probability": ai_probability,
-        "ai_percentage": ai_probability * 100
+        "ai_percentage": ai_percentage
     }
 
 
-# Test
+# --------------------------------------------------
+# RUN PROGRAM
 
 if __name__ == "__main__":
+
+    print()
+    print("---------------------------------------")
+    print("AI-GENERATED TEXT DETECTOR")
+    print("--------------------------------------")
 
     text = input(
         "\nEnter text to analyze: "
@@ -95,15 +112,17 @@ if __name__ == "__main__":
 
     result = predict_text(text)
 
-    print("\nResult")
-    print("--------------------")
+    print()
+    print("--------------------------------------")
+
+    print(
+        f"AI-generated probability: "
+        f"{result['ai_percentage']:.2f}%"
+    )
 
     print(
         f"Human probability: "
         f"{result['human_probability'] * 100:.2f}%"
     )
 
-    print(
-        f"AI probability: "
-        f"{result['ai_percentage']:.2f}%"
-    )
+    print("--------------------------------------")

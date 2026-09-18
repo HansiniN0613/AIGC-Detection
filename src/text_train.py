@@ -1,3 +1,4 @@
+import os
 import torch
 
 from torch.utils.data import DataLoader
@@ -7,9 +8,10 @@ from text_model import TextAIDetector
 from text_dataset import TextDataset
 
 
-# Settings
+# -------------------------------------------------
+# SETTINGS
 
-DATASET_PATH = "../data/text/sample_text.csv"
+DATASET_PATH = "data/text/sample_text.csv"
 
 BATCH_SIZE = 2
 
@@ -17,19 +19,29 @@ EPOCHS = 1
 
 LEARNING_RATE = 2e-5
 
-MODEL_SAVE_PATH = "../models/text_detector.pth"
+MODEL_SAVE_PATH = "models/text_detector.pth"
 
 
-# Device
+# --------------------------------------------------
+# DEVICE
 
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
+print()
+print("--------------------------------------")
+print("TEXT DETECTOR TRAINING")
+print("--------------------------------------")
+
 print("Using device:", device)
 
 
-# Dataset
+# --------------------------------------------------
+# DATASET
+
+print()
+print("Loading dataset...")
 
 dataset = TextDataset(
     DATASET_PATH
@@ -41,18 +53,25 @@ dataloader = DataLoader(
     shuffle=True
 )
 
+print(
+    "Number of samples:",
+    len(dataset)
+)
 
-print("Number of training samples:", len(dataset))
 
+# --------------------------------------------------
+# MODEL
 
-# Model
+print()
+print("Loading RoBERTa model...")
 
 model = TextAIDetector()
 
 model = model.to(device)
 
 
-# Optimizer
+# --------------------------------------------------
+# OPTIMIZER
 
 optimizer = AdamW(
     model.parameters(),
@@ -60,12 +79,17 @@ optimizer = AdamW(
 )
 
 
-# Loss function
+# --------------------------------------------------
+# LOSS FUNCTION
 
 criterion = torch.nn.CrossEntropyLoss()
 
 
-# Training
+# --------------------------------------------------
+# TRAINING
+
+print()
+print("Starting training...")
 
 model.train()
 
@@ -88,20 +112,25 @@ for epoch in range(EPOCHS):
             "label"
         ].to(device)
 
+        # Clear previous gradients
         optimizer.zero_grad()
 
+        # Forward pass
         logits = model(
             input_ids,
             attention_mask
         )
 
+        # Calculate loss
         loss = criterion(
             logits,
             labels
         )
 
+        # Backpropagation
         loss.backward()
 
+        # Update model
         optimizer.step()
 
         total_loss += loss.item()
@@ -116,12 +145,23 @@ for epoch in range(EPOCHS):
     )
 
 
-# Save model
+# --------------------------------------------------
+# SAVE MODEL
+
+os.makedirs(
+    "models",
+    exist_ok=True
+)
 
 torch.save(
     model.state_dict(),
     MODEL_SAVE_PATH
 )
+
+print()
+print("--------------------------------------")
+print("TRAINING COMPLETE")
+print("--------------------------------------")
 
 print(
     "Model saved to:",
