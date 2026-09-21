@@ -1,169 +1,365 @@
 import os
 import torch
-
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score
+)
+from tqdm import tqdm
 
 from text_model import TextAIDetector
 from text_dataset import TextDataset
 
 
-# -------------------------------------------------
+# ======================================
 # SETTINGS
+# ======================================
 
-DATASET_PATH = "data/text/sample_text.csv"
+TRAIN_FILE = "data/text/train.csv"
+VALIDATION_FILE = "data/text/validation.csv"
 
 BATCH_SIZE = 2
-
-EPOCHS = 1
-
+EPOCHS = 2
 LEARNING_RATE = 2e-5
 
-MODEL_SAVE_PATH = "models/text_detector.pth"
+MODEL_SAVE_PATH = "models/text_detector_best.pth"
 
 
-# --------------------------------------------------
+# ======================================
 # DEVICE
+# ======================================
 
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
 
 print()
-print("--------------------------------------")
+print("======================================")
 print("TEXT DETECTOR TRAINING")
-print("--------------------------------------")
-
+print("======================================")
+print()
 print("Using device:", device)
 
 
-# --------------------------------------------------
-# DATASET
+# ======================================
+# LOAD DATASETS
+# ======================================
 
 print()
-print("Loading dataset...")
+print("Loading training dataset...")
 
-dataset = TextDataset(
-    DATASET_PATH
-)
+train_dataset = TextDataset(TRAIN_FILE)
 
-dataloader = DataLoader(
-    dataset,
+print("Training samples:", len(train_dataset))
+
+
+print()
+print("Loading validation dataset...")
+
+validation_dataset = TextDataset(VALIDATION_FILE)
+
+print("Validation samples:", len(validation_dataset))
+
+
+train_loader = DataLoader(
+    train_dataset,
     batch_size=BATCH_SIZE,
     shuffle=True
 )
 
-print(
-    "Number of samples:",
-    len(dataset)
+validation_loader = DataLoader(
+    validation_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=False
 )
 
 
-# --------------------------------------------------
-# MODEL
+# ======================================
+# LOAD MODEL
+# ======================================
 
 print()
 print("Loading RoBERTa model...")
 
 model = TextAIDetector()
-
 model = model.to(device)
 
 
-# --------------------------------------------------
-# OPTIMIZER
+# ======================================
+# OPTIMIZER AND LOSS
+# ======================================
 
 optimizer = AdamW(
     model.parameters(),
     lr=LEARNING_RATE
 )
 
-
-# --------------------------------------------------
-# LOSS FUNCTION
-
 criterion = torch.nn.CrossEntropyLoss()
 
 
-# --------------------------------------------------
+# ======================================
+# BEST MODEL
+# ======================================
+
+best_f1 = 0.0
+
+
+# ======================================
 # TRAINING
+# ======================================
 
 print()
-print("Starting training...")
-
-model.train()
+print("======================================")
+print("STARTING TRAINING")
+print("======================================")
 
 
 for epoch in range(EPOCHS):
 
-    total_loss = 0
+    print()
+    print("--------------------------------------")
+    print(f"Epoch {epoch + 1}/{EPOCHS}")
+    print("--------------------------------------")
 
-    for batch in dataloader:
+    # ==================================
+    # TRAINING
+    # ==================================
 
-        input_ids = batch[
-            "input_ids"
-        ].to(device)
+    model.train()
 
-        attention_mask = batch[
-            "attention_mask"
-        ].to(device)
+    total_training_loss = 0
 
-        labels = batch[
-            "label"
-        ].to(device)
+    progress_bar = tqdm(
+        train_loader,
+        desc="Training",
+        unit="batch"
+    )
 
-        # Clear previous gradients
+    for batch in progress_bar:
+
+        input_ids = batch["input_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
+        labels = batch["label"].to(device)
+
         optimizer.zero_grad()
 
-        # Forward pass
         logits = model(
             input_ids,
             attention_mask
         )
 
-        # Calculate loss
         loss = criterion(
             logits,
             labels
         )
 
-        # Backpropagation
         loss.backward()
 
-        # Update model
         optimizer.step()
 
-        total_loss += loss.item()
+        total_training_loss += loss.item()
 
-    average_loss = (
-        total_loss / len(dataloader)
+        progress_bar.set_postfix(
+            loss=f"{loss.item():.4f}"
+        )
+
+    average_training_loss = (
+        total_training_loss / len(train_loader)
+    )
+
+
+    # ==================================
+    # VALIDATION
+    # ==================================
+
+    print()
+    print("Running validation...")
+
+    model.eval()
+
+    total_validation_loss = 0
+
+    all_predictions = []
+    all_labels = []
+    all_probabilities = []
+
+    with torch.no_grad():
+
+        for batch in tqdm(
+            validation_loader,
+            desc="Validation",
+            unit="batch"
+        ):
+
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["label"].to(device)
+
+            logits = model(
+                input_ids,
+                attention_mask
+            )
+
+            loss = criterion(
+                logits,
+                labels
+            )
+
+            total_validation_loss += loss.item()
+
+            probabilities = torch.softmax(
+                logits,
+                dim=1
+            )
+
+            predictions = torch.argmax(
+                logits,
+                dim=1
+            )
+
+            all_predictions.extend(
+                predictions.cpu().numpy()
+            )
+
+            all_labels.extend(
+                labels.cpu().numpy()
+            )
+
+            all_probabilities.extend(
+                probabilities[:, 1].cpu().numpy()
+            )
+
+
+    average_validation_loss = (
+        total_validation_loss /
+        len(validation_loader)
+    )
+
+
+    # ==================================
+    # METRICS
+    # ==================================
+
+    validation_accuracy = accuracy_score(
+        all_labels,
+        all_predictions
+    )
+
+    validation_precision = precision_score(
+        all_labels,
+        all_predictions,
+        zero_division=0
+    )
+
+    validation_recall = recall_score(
+        all_labels,
+        all_predictions,
+        zero_division=0
+    )
+
+    validation_f1 = f1_score(
+        all_labels,
+        all_predictions,
+        zero_division=0
+    )
+
+    validation_auc = roc_auc_score(
+        all_labels,
+        all_probabilities
+    )
+
+
+    # ==================================
+    # DISPLAY RESULTS
+    # ==================================
+
+    print()
+    print("======================================")
+    print("VALIDATION RESULTS")
+    print("======================================")
+
+    print(
+        f"Training Loss:       "
+        f"{average_training_loss:.4f}"
     )
 
     print(
-        f"Epoch {epoch + 1}/{EPOCHS} "
-        f"- Loss: {average_loss:.4f}"
+        f"Validation Loss:     "
+        f"{average_validation_loss:.4f}"
+    )
+
+    print(
+        f"Accuracy:             "
+        f"{validation_accuracy * 100:.2f}%"
+    )
+
+    print(
+        f"Precision:            "
+        f"{validation_precision * 100:.2f}%"
+    )
+
+    print(
+        f"Recall:               "
+        f"{validation_recall * 100:.2f}%"
+    )
+
+    print(
+        f"F1 Score:             "
+        f"{validation_f1 * 100:.2f}%"
+    )
+
+    print(
+        f"ROC-AUC:              "
+        f"{validation_auc:.4f}"
     )
 
 
-# --------------------------------------------------
-# SAVE MODEL
+    # ==================================
+    # SAVE BEST MODEL
+    # ==================================
 
-os.makedirs(
-    "models",
-    exist_ok=True
-)
+    if validation_f1 > best_f1:
 
-torch.save(
-    model.state_dict(),
-    MODEL_SAVE_PATH
+        best_f1 = validation_f1
+
+        os.makedirs(
+            "models",
+            exist_ok=True
+        )
+
+        torch.save(
+            model.state_dict(),
+            MODEL_SAVE_PATH
+        )
+
+        print()
+        print("New best model saved!")
+
+        print(
+            f"Best Validation F1: "
+            f"{best_f1 * 100:.2f}%"
+        )
+
+
+# ======================================
+# COMPLETE
+# ======================================
+
+print()
+print("======================================")
+print("TRAINING COMPLETE")
+print("======================================")
+
+print()
+print(
+    f"Best Validation F1: "
+    f"{best_f1 * 100:.2f}%"
 )
 
 print()
-print("--------------------------------------")
-print("TRAINING COMPLETE")
-print("--------------------------------------")
-
-print(
-    "Model saved to:",
-    MODEL_SAVE_PATH
-)
+print("Model saved to:")
+print(MODEL_SAVE_PATH)
