@@ -10,7 +10,7 @@ class TextDataset(Dataset):
     def __init__(
         self,
         csv_file,
-        max_length=256
+        max_length=512
     ):
 
         self.data = pd.read_csv(csv_file)
