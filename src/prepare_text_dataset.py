@@ -1,158 +1,160 @@
 import json
 import os
-
 import pandas as pd
-
 from huggingface_hub import hf_hub_download
 
 
-# -------------------------------------------------
+# ======================================
 # SETTINGS
+# ======================================
 
 REPO_ID = "Hello-SimpleAI/HC3"
 
-FILE_NAME = "all.jsonl"
+SOURCE_FILES = [
+    "reddit_eli5.jsonl",
+    "open_qa.jsonl",
+    "wiki_csai.jsonl",
+    "medicine.jsonl",
+    "finance.jsonl"
+]
 
-OUTPUT_FILE = "data/text/hc3_raw.csv"
+OUTPUT_FILE = "data/text/hc3_multisource_raw.csv"
 
-MAX_QUESTIONS = 2000
+MAX_RECORDS_PER_SOURCE = 1000
 
 
-# -------------------------------------------------
+# ======================================
 # START
+# ======================================
 
 print()
-print("**************************************")
-print("HC3 TEXT DATASET PREPARATION")
-print("**************************************")
-
-
-# -------------------------------------------------
-# DOWNLOAD DATASET FILE
-
+print("======================================")
+print("HC3 MULTI-SOURCE DATASET PREPARATION")
+print("======================================")
 print()
-print("Downloading HC3 JSONL file...")
 
 
-file_path = hf_hub_download(
-    repo_id=REPO_ID,
-    filename=FILE_NAME,
-    repo_type="dataset"
-)
+all_data = []
 
 
-print()
-print("HC3 file downloaded.")
+# ======================================
+# PROCESS EACH SOURCE
+# ======================================
 
-print(
-    "File location:",
-    file_path
-)
+for source_file in SOURCE_FILES:
 
+    print("--------------------------------------")
+    print("Processing:", source_file)
+    print("--------------------------------------")
 
-# -------------------------------------------------
-# READ JSONL
+    try:
 
-print()
-print("Reading HC3 data...")
+        file_path = hf_hub_download(
+            repo_id=REPO_ID,
+            filename=source_file,
+            repo_type="dataset"
+        )
 
+        print("Downloaded successfully.")
 
-records = []
+    except Exception as error:
 
-
-with open(
-    file_path,
-    "r",
-    encoding="utf-8"
-) as file:
-
-    for line_number, line in enumerate(file):
-
-        if line_number >= MAX_QUESTIONS:
-            break
-
-        record = json.loads(line)
-
-        records.append(record)
+        print("Could not download:", source_file)
+        print("Error:", error)
+        continue
 
 
-print()
-print(
-    "Questions loaded:",
-    len(records)
-)
+    records = []
+
+    with open(
+        file_path,
+        "r",
+        encoding="utf-8"
+    ) as file:
+
+        for line_number, line in enumerate(file):
+
+            if line_number >= MAX_RECORDS_PER_SOURCE:
+                break
+
+            record = json.loads(line)
+
+            records.append(record)
 
 
-# -------------------------------------------------
-# CONVERT TO TEXT + LABEL
-
-print()
-print("Creating text dataset...")
-
-
-data = []
-
-
-for record in records:
-
-    # ----------------------------------------------
-    # Human answers
-    # ----------------------------------------------
-
-    human_answers = record.get(
-        "human_answers",
-        []
+    print(
+        "Questions loaded:",
+        len(records)
     )
 
-    for answer in human_answers:
 
-        if answer and answer.strip():
+    # ==================================
+    # CREATE SAMPLES
+    # ==================================
 
-            data.append({
-                "text": answer.strip(),
-                "label": 0,
-                "source": record.get(
-                    "source",
-                    "unknown"
-                )
-            })
-
-
-    # ----------------------------------------------
-    # ChatGPT answers
-    # ----------------------------------------------
-
-    chatgpt_answers = record.get(
-        "chatgpt_answers",
-        []
+    source_name = source_file.replace(
+        ".jsonl",
+        ""
     )
 
-    for answer in chatgpt_answers:
+    for record in records:
 
-        if answer and answer.strip():
+        # ------------------------------
+        # HUMAN ANSWERS
+        # ------------------------------
 
-            data.append({
-                "text": answer.strip(),
-                "label": 1,
-                "source": record.get(
-                    "source",
-                    "unknown"
-                )
-            })
+        human_answers = record.get(
+            "human_answers",
+            []
+        )
+
+        for answer in human_answers:
+
+            if answer and answer.strip():
+
+                all_data.append({
+                    "text": answer.strip(),
+                    "label": 0,
+                    "source": source_name
+                })
 
 
-# -------------------------------------------------
+        # ------------------------------
+        # AI ANSWERS
+        # ------------------------------
+
+        chatgpt_answers = record.get(
+            "chatgpt_answers",
+            []
+        )
+
+        for answer in chatgpt_answers:
+
+            if answer and answer.strip():
+
+                all_data.append({
+                    "text": answer.strip(),
+                    "label": 1,
+                    "source": source_name
+                })
+
+
+# ======================================
 # CREATE DATAFRAME
+# ======================================
 
-df = pd.DataFrame(data)
+print()
+print("Creating dataframe...")
+
+df = pd.DataFrame(all_data)
 
 
-# -------------------------------------------------
+# ======================================
 # REMOVE DUPLICATES
+# ======================================
 
 print()
 print("Removing duplicate texts...")
-
 
 before = len(df)
 
@@ -162,29 +164,23 @@ df = df.drop_duplicates(
 
 after = len(df)
 
-
 print(
     "Duplicates removed:",
     before - after
 )
 
 
-# -------------------------------------------------
-# RESET INDEX
-
-df = df.reset_index(
-    drop=True
-)
+df = df.reset_index(drop=True)
 
 
-# -------------------------------------------------
+# ======================================
 # SAVE
+# ======================================
 
 os.makedirs(
     "data/text",
     exist_ok=True
 )
-
 
 df.to_csv(
     OUTPUT_FILE,
@@ -192,19 +188,17 @@ df.to_csv(
 )
 
 
-# -------------------------------------------------
+# ======================================
 # SUMMARY
+# ======================================
 
 print()
-print("**************************************")
+print("======================================")
 print("DATASET PREPARATION COMPLETE")
-print("**************************************")
+print("======================================")
 
 print()
-print(
-    "Total text samples:",
-    len(df)
-)
+print("Total samples:", len(df))
 
 print()
 print("Label distribution:")
@@ -214,13 +208,14 @@ print(
 )
 
 print()
-print("Label meaning:")
+print("Source distribution:")
 
-print("0 = Human")
-print("1 = AI-generated")
+print(
+    df.groupby(
+        ["source", "label"]
+    ).size()
+)
 
 print()
-print(
-    "Saved to:",
-    OUTPUT_FILE
-)
+print("Saved to:")
+print(OUTPUT_FILE)
