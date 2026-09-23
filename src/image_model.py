@@ -7,11 +7,11 @@ from transformers import ViTModel
 class ImageAIDetector(nn.Module):
     """
     ViT-based binary classifier for detecting
-    human-created vs AI-generated images.
+    human/real vs AI-generated images.
 
     Label:
-        0 = Human
-        1 = AI-generated
+        0 = Human / real image
+        1 = AI-generated image
     """
 
     def __init__(self):
